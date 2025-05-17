@@ -1,0 +1,29 @@
+{
+  "name": "formulario-soporte",
+  "version": "1.0.0",
+  "description": "",
+  "main": "AuthController.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ashura8/proyectobackend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ashura8/proyectobackend/issues"
+  },
+  "homepage": "https://github.com/Ashura8/proyectobackend#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "mssql": "^11.0.1",
+    "nodemailer": "^7.0.3"
+  }
+}
