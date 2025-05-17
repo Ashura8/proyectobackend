@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  sqlserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sqlserver-container
+    ports:
+      - "1433:1433"
+    environment:
+      SA_PASSWORD: "TuPassword123"
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Express"
