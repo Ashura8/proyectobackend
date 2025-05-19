@@ -1,4 +1,4 @@
-""// Backend optimizado para el sistema de gestión de inventario y servicios
+// Backend optimizado para el sistema de gestión de inventario y servicios
 
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -8,10 +8,6 @@ require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🌐 Servidor escuchando en el puerto ${PORT}`);
-});
-
 
 app.use(cors());
 app.use(express.json());
@@ -29,18 +25,6 @@ const dbConfig = {
     }
 };
 
-// Función para conectar a la base de datos
-async function connectDB() {
-    try {
-        await sql.connect(dbConfig);
-        console.log('✅ Conexión exitosa a SQL Server');
-    } catch (err) {
-        console.error('❌ Error al conectar a SQL Server:', err);
-    }
-}
-
-connectDB();
-
 // Inicialización de Nodemailer
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -54,54 +38,14 @@ const transporter = nodemailer.createTransport({
 // 🚀 RUTAS API
 // =========================
 
-//LOGIN
-//==========================
-// app.js
-// const dotenv = require('dotenv');
-// const authRoutes = require('./routes/authRoutes');
-// const { authenticateToken, authorizeRoles } = require('./middlewares/authMiddleware');
-
-// dotenv.config();
-// app.use(cors());
-// app.use(express.json());
-
-// // Rutas de autenticación
-// app.use('/api/auth', authRoutes);
-
-// // 🔒 Rutas protegidas por autenticación y roles
-// app.get('/api/inventario', authenticateToken, authorizeRoles('admin', 'tecnico'), async (req, res) => {
-//     try {
-//         const result = await sql.query('SELECT * FROM inventario');
-//         res.json(result.recordset);
-//     } catch (err) {
-//         res.status(500).json({ error: 'Error al obtener inventario', details: err.message });
-//     }
-// });
-
-// app.post('/api/solicitudes/registrar', authenticateToken, authorizeRoles('cliente'), async (req, res) => {
-//     // Código para registrar una solicitud
-// });
-
-// app.get('/api/admin/dashboard', authenticateToken, authorizeRoles('admin'), (req, res) => {
-//     res.json({ mensaje: 'Acceso autorizado al dashboard de administración' });
-// });
-
-// // Iniciar el servidor
-// app.listen(PORT, () => {
-//     console.log(`🌐 Servidor escuchando en http://localhost:${PORT}`);
-// });
-
-//
-
-
 // 🔹 MÓDULO INVENTARIO
-// =========================
 app.get('/api/inventario', async (req, res) => {
     try {
+        await sql.connect(dbConfig);
         const result = await sql.query('SELECT * FROM inventario');
         res.json(result.recordset);
     } catch (err) {
-        res.status(500).json({ error: 'Error al obtener inventario', details: err });
+        res.status(500).json({ error: 'Error al obtener inventario', details: err.message || err });
     }
 });
 
@@ -125,13 +69,11 @@ app.post('/api/inventario', async (req, res) => {
             .query('INSERT INTO inventario (tipo_producto, nombre_producto, marca, modelo, estado_producto, ubicacion, fecha_ingreso, fecha_ultimo_mantenimiento, observaciones) VALUES (@tipo_producto, @nombre_producto, @marca, @modelo, @estado_producto, @ubicacion, @fecha_ingreso, @fecha_ultimo_mantenimiento, @observaciones)');
         res.status(201).json({ message: 'Producto agregado correctamente' });
     } catch (error) {
-        console.error('❌ Error al agregar producto:', error.message || error);
         res.status(500).json({ error: 'Error al agregar producto', details: error.message || error.toString() });
     }
 });
 
 // 🔹 MÓDULO CORREOS
-// =========================
 app.post('/api/correos/enviar', async (req, res) => {
     const { destinatario, departamento, mensaje } = req.body;
     try {
@@ -143,11 +85,11 @@ app.post('/api/correos/enviar', async (req, res) => {
         });
         res.status(200).json({ message: 'Correo enviado correctamente' });
     } catch (error) {
-        console.error('❌ Error al enviar correo:', error.message || error);
         res.status(500).json({ error: 'Error al enviar correo', details: error.message || error.toString() });
     }
 });
 
+// 🔹 REGISTRAR SOLICITUD Y SERVICIO RELACIONADO
 app.post('/api/solicitudes/registrar', async (req, res) => {
     const { departamento, tipoFalla, mensaje, reportadoPor } = req.body;
 
@@ -157,13 +99,9 @@ app.post('/api/solicitudes/registrar', async (req, res) => {
 
     try {
         const pool = await sql.connect(dbConfig);
-
-        // Iniciar una transacción
         const transaction = new sql.Transaction(pool);
-
         await transaction.begin();
 
-        // Insertar la solicitud y obtener su ID
         const resultSolicitud = await transaction.request()
             .input('departamento', sql.VarChar, departamento)
             .input('tipoFalla', sql.VarChar, tipoFalla)
@@ -179,7 +117,6 @@ app.post('/api/solicitudes/registrar', async (req, res) => {
 
         const idSolicitud = resultSolicitud.recordset[0].id;
 
-        // Insertar el servicio relacionado
         await transaction.request()
             .input('id_solicitud', sql.Int, idSolicitud)
             .input('estado', sql.VarChar, 'Pendiente')
@@ -188,23 +125,19 @@ app.post('/api/solicitudes/registrar', async (req, res) => {
                 VALUES (@id_solicitud, @estado)
             `);
 
-        // Confirmar la transacción
         await transaction.commit();
 
         res.status(201).json({ message: 'Solicitud y servicio registrados correctamente', idSolicitud });
-
     } catch (error) {
-        console.error('❌ Error al registrar la solicitud y el servicio:', error.message || error);
         res.status(500).json({ error: 'Error al registrar la solicitud y el servicio', details: error.message || error.toString() });
     }
 });
 
-
-// SERVICIOS
-// =========================
+// 🔹 MÓDULO SERVICIOS - Obtener detalle de un servicio
 app.get('/api/servicios/detalle/:id', async (req, res) => {
     const { id } = req.params;
     try {
+        await sql.connect(dbConfig);
         const result = await sql.query(`
             SELECT 
                 s.id, s.estado, s.atendido_por, s.materiales_usados, s.fecha_atencion, s.tiempo_tardado,
@@ -223,40 +156,14 @@ app.get('/api/servicios/detalle/:id', async (req, res) => {
 
         res.status(200).json(result.recordset[0]);
     } catch (error) {
-        console.error('❌ Error al obtener detalle del servicio:', error.message || error);
         res.status(500).json({ error: 'Error al obtener detalle del servicio', details: error.message || error.toString() });
     }
 });
 
-
-// 🔹 MÓDULO SERVICIOS - Obtener lista de servicios
-// app.get('/api/servicios', async (req, res) => {
-//     try {
-//         const result = await sql.query(`
-//             SELECT 
-//                 s.id, s.estado, s.atendido_por, s.materiales_usados, s.fecha_atencion, s.tiempo_tardado,
-//                 sol.departamento, sol.tipoFalla, sol.mensaje, sol.reportadoPor, sol.estado AS estado_solicitud, sol.fechaRegistro
-//             FROM 
-//                 servicios s
-//             JOIN 
-//                 solicitudes sol ON s.id_solicitud = sol.id
-//         `);
-
-//         res.status(200).json(result.recordset);
-//     } catch (error) {
-//         console.error('❌ Error al obtener servicios:', error.message || error);
-//         res.status(500).json({ error: 'Error al obtener servicios', details: error.message || error.toString() });
-//     }
-// });
-
-// backend/app.js (o donde tengas tu servidor Express)
-// =========================
-// 🚀 RUTAS API - SERVICIOS
-// =========================
+// 🔹 MÓDULO SERVICIOS - Obtener lista de servicios con datos relacionados
 app.get('/api/servicios', async (req, res) => {
     try {
-        console.log('✅ Ruta /api/servicios recibida');
-
+        await sql.connect(dbConfig);
         const result = await sql.query(`
             SELECT 
                 s.id,
@@ -281,17 +188,13 @@ app.get('/api/servicios', async (req, res) => {
                 correos_enviados ce ON s.id_correo = ce.id
         `);
 
-        console.log('✅ Datos obtenidos:', result.recordset);
-
         res.json(result.recordset);
     } catch (err) {
-        console.error('❌ Error al obtener servicios:', err.message);
         res.status(500).json({ error: 'Error al obtener servicios', details: err.message });
     }
 });
 
-// ASIGNACIÓN DE SERVICIOS
-// =========================
+// 🔹 ASIGNACIÓN DE SERVICIOS
 app.post('/api/servicios/asignar', async (req, res) => {
     const { servicios, trabajador } = req.body;
 
@@ -301,15 +204,10 @@ app.post('/api/servicios/asignar', async (req, res) => {
 
     try {
         const pool = await sql.connect(dbConfig);
-
-        // Iniciar una transacción
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
 
-
-        // Actualizar cada servicio seleccionado
         for (const id of servicios) {
-            console.log(`🔹 Asignando servicio ID: ${id} al trabajador: ${trabajador} con estado: 'En Proceso'`);
             await transaction.request()
                 .input('trabajador', sql.VarChar, trabajador)
                 .input('id', sql.Int, id)
@@ -319,25 +217,16 @@ app.post('/api/servicios/asignar', async (req, res) => {
                     WHERE id = @id
                 `);
         }
-        // Confirmar la transacción
         await transaction.commit();
 
         res.status(200).json({ mensaje: 'Servicios asignados correctamente.' });
-
     } catch (error) {
-        console.error('❌ Error al asignar servicios:', error.message || error);
         res.status(500).json({ error: 'Error al asignar servicios', details: error.message || error.toString() });
     }
 });
 
-
-
-
-
 // =========================
-
 // Iniciar el servidor
 app.listen(PORT, () => {
     console.log(`🌐 Servidor escuchando en http://localhost:${PORT}`);
 });
-
